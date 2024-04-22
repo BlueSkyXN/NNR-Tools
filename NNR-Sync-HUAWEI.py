@@ -57,6 +57,7 @@ def create_dns_records(config, nnr_data):
     zone_id = config.get('HUAWEI_DNS', 'HUAWEI_DNS_ZONE_ID')
     domain_root = config['DOMAIN_MAP']['DOMIAN_ROOT']
     domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMIAN_ROOT'}
+    all_records_to_delete = []
 
     for entry in nnr_data:
         sid = entry['sid']
@@ -70,11 +71,12 @@ def create_dns_records(config, nnr_data):
             record_ids = [rec['id'] for rec in existing_records]
             latest_record_id = max(existing_records, key=lambda x: x['updated_at'])['id']
             records_to_delete = [rid for rid in record_ids if rid != latest_record_id]
+            all_records_to_delete.extend(records_to_delete)
 
-            if records_to_delete:
-                delete_record_sets(XSTOKEN, zone_id, records_to_delete)
+    if all_records_to_delete:
+        batch_delete_record_sets(XSTOKEN, zone_id, all_records_to_delete)
 
-def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=300):
+def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=10):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     data = {
         "name": domain_name + ".",
@@ -108,15 +110,19 @@ def query_record_sets(XSTOKEN, zone_id, domain_name):
         print("Failed to query records:", response.status_code)
         return []
 
-def delete_record_sets(XSTOKEN, zone_id, record_ids):
-    for record_id in record_ids:
-        url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets/{record_id}"
-        headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
-        response = requests.delete(url, headers=headers)
-        if response.status_code in [200, 202]:
-            print(f"Record ID {record_id} deleted successfully.")
+def batch_delete_record_sets(XSTOKEN, zone_id, record_ids):
+    url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
+    headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
+
+    # 分批删除，每批最多100条记录
+    for i in range(0, len(record_ids), 100):
+        batch_ids = record_ids[i:i+100]
+        data = {"recordset_ids": batch_ids}
+        response = requests.delete(url, headers=headers, json=data)
+        if response.status_code in [200, 202, 204]:
+            print(f"Successfully deleted record IDs: {', '.join(batch_ids)}")
         else:
-            print(f"Failed to delete record ID {record_id}: {response.status_code}, {response.text}")
+            print(f"Failed to delete records: {response.status_code}, {response.text}")
 
 def main():
     args = setup_argparse()
