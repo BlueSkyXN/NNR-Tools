@@ -2,11 +2,13 @@ import requests
 import json
 import configparser
 
-def get_XSubjectToken(config_file='NNR.conf'):
+def read_config(config_file):
     # 读取配置文件
     config = configparser.ConfigParser()
     config.read(config_file)
+    return config
 
+def get_XSubjectToken(config):
     # 从配置文件中获取IAM用户名、密码和所属账号名
     IAM_AccountName = config.get('HUAWEI_API', 'HUAWEI_IAM_AccountName')
     IAM_UserName = config.get('HUAWEI_API', 'HUAWEI_IAM_UserName')
@@ -44,9 +46,19 @@ def get_XSubjectToken(config_file='NNR.conf'):
         print("X-Subject-Token not found in response headers.")
         return None
 
-def query_public_zones(XSTOKEN):
+def query_record_sets(XSTOKEN, zone_id):
+    # 固定的筛选条件
+    status = "ACTIVE"
+    type = "A"
+
     # 构建GET请求的URL
-    url = "https://dns.myhuaweicloud.com/v2/zones"
+    url = f"https://dns.myhuaweicloud.com/v2/zones/{zone_id}/recordsets"
+
+    # 设置查询参数
+    params = {
+        "status": status,
+        "type": type
+    }
 
     # 设置请求头部
     headers = {
@@ -55,24 +67,31 @@ def query_public_zones(XSTOKEN):
     }
 
     # 发送GET请求
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, params=params)
 
     # 返回响应内容
     return response.json()
 
-def main():
+def main(config_file):
+    # 读取配置文件
+    config = read_config(config_file)
+
     # 获取X-Subject-Token
-    XSTOKEN = get_XSubjectToken()
+    XSTOKEN = get_XSubjectToken(config)
 
     # 如果没有得到正确的返回值，则从本地文件中读取TOKEN
     if not XSTOKEN:
         with open('HUAWEI_CLOUD_TOKEN.txt', 'r') as file:
             XSTOKEN = file.read().strip()
 
-    # 查询公网Zone列表
-    zones = query_public_zones(XSTOKEN)
-    print("Public Zones:", zones)
+    # 从配置文件中读取Zone ID
+    zone_id = config.get('HUAWEI_DNS', 'HUAWEI_DNS_ZONE_ID')
+
+    # 查询单个Zone下Record Set列表
+    record_sets = query_record_sets(XSTOKEN, zone_id)
+    print("Record Sets for Zone:", record_sets)
 
 # 如果直接运行此脚本，则执行main函数
 if __name__ == "__main__":
-    main()
+    config_file = 'NNR.conf'
+    main(config_file)
