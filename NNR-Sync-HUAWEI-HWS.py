@@ -19,7 +19,7 @@ CONFIG = {
         "f339f3e7-5520-4268-8ca7-b0dcde7a402d": "nnrsync-ah-hk-cu",
         "c3b76a74-74d1-4077-af40-4f95d2e93f43": "nnrsync-ah-jp-cm",
         "3f6c3f59-67e5-48fb-9e61-e34e1db95227": "nnrsync-ah-hk-cm",
-        "domian_root": "huawei-ddns.com",
+        "DOMAIN_ROOT": "huawei-ddns.com",
     },
     "HUAWEI_API": {
         "huawei_iam_accountname": "hwXXX",
@@ -80,8 +80,8 @@ def create_dns_records():
         return
 
     zone_id = CONFIG['HUAWEI_DNS']['HUAWEI_DNS_ZONE_ID']
-    domain_root = CONFIG['DOMAIN_MAP']['DOMIAN_ROOT']
-    domain_mappings = {key: value for key, value in CONFIG['DOMAIN_MAP'].items() if key != 'DOMIAN_ROOT'}
+    domain_root = CONFIG['DOMAIN_MAP']['DOMAIN_ROOT']
+    domain_mappings = {key: value for key, value in CONFIG['DOMAIN_MAP'].items() if key != 'DOMAIN_ROOT'}
     all_records_to_delete = []
 
     for entry in fetch_nnr_data():

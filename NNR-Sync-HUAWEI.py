@@ -59,8 +59,8 @@ def create_dns_records(config, nnr_data):
         return
 
     zone_id = config.get('HUAWEI_DNS', 'HUAWEI_DNS_ZONE_ID')
-    domain_root = config['DOMAIN_MAP']['DOMIAN_ROOT']
-    domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMIAN_ROOT'}
+    domain_root = config['DOMAIN_MAP']['DOMAIN_ROOT']
+    domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMAIN_ROOT'}
     all_records_to_delete = []
 
     for entry in nnr_data:
