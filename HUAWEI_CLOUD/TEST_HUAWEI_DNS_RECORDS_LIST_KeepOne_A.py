@@ -9,12 +9,12 @@ def read_config(config_file):
     return config
 
 def get_XSubjectToken(config):
-    # 从配置文件中获取IAM用户名、密码和所属账号名
+    # 从配置文件中获取IAM的账户信息
     IAM_AccountName = config.get('HUAWEI_API', 'HUAWEI_IAM_AccountName')
     IAM_UserName = config.get('HUAWEI_API', 'HUAWEI_IAM_UserName')
     IAM_Password = config.get('HUAWEI_API', 'HUAWEI_IAM_Password')
 
-    # 构建POST请求的JSON数据
+    # 构建身份验证请求的数据
     data = {
         "auth": {
             "identity": {
@@ -33,68 +33,64 @@ def get_XSubjectToken(config):
         }
     }
 
-    # 发送POST请求
+    # 发送POST请求获取Token
     url = "https://iam.myhuaweicloud.com/v3/auth/tokens"
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, data=json.dumps(data), headers=headers)
-
-    # 获取 X-Subject-Token 字段的值
     token = response.headers.get('X-Subject-Token')
+
     if token:
         return token
     else:
         print("X-Subject-Token not found in response headers.")
         return None
 
-def query_record_sets(XSTOKEN, zone_id,HUAWEI_DNS_TEST_DOMAIN):
-    # 固定的筛选条件
-    status = "ACTIVE"
-    type = "A"
-
-    # 构建GET请求的URL
-    url = f"https://dns.myhuaweicloud.com/v2/zones/{zone_id}/recordsets"
-
-    # 设置查询参数
+def query_record_sets(XSTOKEN, zone_id, HUAWEI_DNS_TEST_DOMAIN):
+    # 设置请求参数
     params = {
-        "status": status,
-        "type": type,
+        "status": "ACTIVE",
+        "type": "A",
         "search_mode": "equal",
         "name": HUAWEI_DNS_TEST_DOMAIN
     }
+    url = f"https://dns.myhuaweicloud.com/v2/zones/{zone_id}/recordsets"
+    headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
 
-    # 设置请求头部
-    headers = {
-        "Content-Type": "application/json",
-        "X-Auth-Token": XSTOKEN
-    }
-
-    # 发送GET请求
+    # 发送查询请求
     response = requests.get(url, headers=headers, params=params)
-
-    # 返回响应内容
     return response.json()
 
-def main(config_file):
-    # 读取配置文件
-    config = read_config(config_file)
+def delete_record(XSTOKEN, zone_id, recordset_id):
+    # 删除指定的DNS记录
+    url = f"https://dns.myhuaweicloud.com/v2/zones/{zone_id}/recordsets/{recordset_id}"
+    headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
+    response = requests.delete(url, headers=headers)
 
-    # 获取X-Subject-Token
+    if response.status_code in [200, 202]:
+        print(f"Record {recordset_id} deletion requested successfully.")
+    else:
+        print(f"Failed to delete record {recordset_id}: {response.status_code}, {response.text}")
+
+def main(config_file):
+    config = read_config(config_file)
     XSTOKEN = get_XSubjectToken(config)
 
-    # 如果没有得到正确的返回值，则从本地文件中读取TOKEN
     if not XSTOKEN:
-        with open('HUAWEI_CLOUD_TOKEN.txt', 'r') as file:
-            XSTOKEN = file.read().strip()
+        print("Failed to obtain token, check credentials.")
+        return
 
-    # 从配置文件中读取Zone ID
     zone_id = config.get('HUAWEI_DNS', 'HUAWEI_DNS_ZONE_ID')
     HUAWEI_DNS_TEST_DOMAIN = config.get('HUAWEI_DNS', 'HUAWEI_DNS_TEST_DOMAIN')
+    record_sets = query_record_sets(XSTOKEN, zone_id, HUAWEI_DNS_TEST_DOMAIN)
 
-    # 查询单个Zone下Record Set列表
-    record_sets = query_record_sets(XSTOKEN, zone_id,HUAWEI_DNS_TEST_DOMAIN)
-    print("Record Sets for Zone:", record_sets)
+    if 'recordsets' in record_sets:
+        latest_record = max(record_sets['recordsets'], key=lambda x: x['update_at'])
+        print(f"Keeping latest record: {latest_record['id']}")
 
-# 如果直接运行此脚本，则执行main函数
+        for record in record_sets['recordsets']:
+            if record['id'] != latest_record['id']:
+                delete_record(XSTOKEN, zone_id, record['id'])
+
 if __name__ == "__main__":
     config_file = 'NNR.conf'
     main(config_file)
