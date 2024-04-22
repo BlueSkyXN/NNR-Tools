@@ -9,7 +9,6 @@ def read_config(config_file):
     return config
 
 def get_XSubjectToken(config):
-    # 从配置文件中获取IAM账户信息以及项目信息
     IAM_AccountName = config.get('HUAWEI_API', 'HUAWEI_IAM_AccountName')
     IAM_UserName = config.get('HUAWEI_API', 'HUAWEI_IAM_UserName')
     IAM_Password = config.get('HUAWEI_API', 'HUAWEI_IAM_Password')
@@ -28,7 +27,9 @@ def get_XSubjectToken(config):
                 }
             },
             "scope": {
-                "project": {"name": IAM_Project_ID}
+                   "project": {
+                    "name": IAM_Project_ID
+               }
             }
         }
     }
@@ -38,23 +39,49 @@ def get_XSubjectToken(config):
     response = requests.post(url, data=json.dumps(data), headers=headers)
     return response.headers.get('X-Subject-Token')
 
-def create_dns_record(zone_id, X_Auth_Token, record_name, record_values, ttl=300):
+def fetch_nnr_data(nnr_url, nnr_token):
+    headers = {"content-type": "application/json", "token": nnr_token}
+    response = requests.post(nnr_url, headers=headers)
+    if response.status_code == 200:
+        return response.json()['data']
+    else:
+        print("Failed to fetch data from NNR API:", response.status_code)
+        return None
+
+def create_dns_records(config, nnr_data):
+    XSTOKEN = get_XSubjectToken(config)
+    if not XSTOKEN:
+        print("Failed to obtain token, check credentials.")
+        return
+
+    zone_id = config.get('HUAWEI_DNS', 'HUAWEI_DNS_ZONE_ID')
+    domain_root = config['DOMAIN_MAP']['DOMIAN_ROOT']
+    domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMIAN_ROOT'}
+
+    for entry in nnr_data:
+        sid = entry['sid']
+        hosts = entry['host'].split(',')
+        if sid in domain_mappings:
+            domain_name = f"{domain_mappings[sid]}.{domain_root}"
+            create_dns_record(zone_id, XSTOKEN, domain_name, hosts)
+
+def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=300):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     data = {
-        "name": record_name + ".",
+        "name": domain_name + ".",
         "type": "A",
         "ttl": ttl,
-        "records": record_values.split(',')
+        "records": record_values
     }
     headers = {
         "Content-Type": "application/json",
-        "X-Auth-Token": X_Auth_Token
+        "X-Auth-Token": XSTOKEN
     }
     response = requests.post(url, headers=headers, data=json.dumps(data))
     if response.status_code == 202:
-        print(f"Record created successfully for {record_name}: {response.json()}")
+        print(f"Record created successfully for {domain_name}: {response.json()}")
     else:
-        print(f"Failed to create record for {record_name}: {response.status_code}, {response.text}")
+        print(f"Failed to create record for {domain_name}: {response.status_code}, {response.text}")
 
 def setup_argparse():
     parser = argparse.ArgumentParser(description="Manage DNS records based on NNR API data")
@@ -65,36 +92,10 @@ def main():
     args = setup_argparse()
     config = read_config(args.config)
 
-    # Load API configuration and domain mappings
     nnr_url, nnr_token = config['NNR_API']['NNR_API_URL'], config['NNR_API']['NNR_API_TOKEN']
-    domain_root = config['DOMAIN_MAP']['DOMIAN_ROOT']
-    domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMIAN_ROOT'}
-
-    # Prepare headers for NNR API
-    headers = {"content-type": "application/json", "token": nnr_token}
-
-    # Request NNR API
-    response = requests.post(nnr_url, headers=headers)
-    if response.status_code != 200:
-        print("Failed to fetch data from NNR API:", response.status_code)
-        return
-
-    # Get token for Huawei Cloud DNS operations
-    XSTOKEN = get_XSubjectToken(config)
-    if not XSTOKEN:
-        print("Failed to obtain Huawei Cloud token.")
-        return
-
-    zone_id = config.get('HUAWEI_DNS', 'HUAWEI_DNS_ZONE_ID')
-    data = response.json()['data']
-
-    # Process each entry from NNR API response
-    for entry in data:
-        sid = entry['sid']
-        hosts = entry['host']
-        if sid in domain_mappings:
-            domain_name = domain_mappings[sid] + '.' + domain_root
-            create_dns_record(zone_id, XSTOKEN, domain_name, hosts)
+    nnr_data = fetch_nnr_data(nnr_url, nnr_token)
+    if nnr_data:
+        create_dns_records(config, nnr_data)
 
 if __name__ == "__main__":
     main()
