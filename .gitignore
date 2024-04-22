@@ -159,5 +159,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 NNR.conf
-
-data.csv
+*.csv
+HUAWEI_CLOUD_TOKEN.txt
