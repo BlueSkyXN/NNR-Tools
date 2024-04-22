@@ -3,11 +3,13 @@ import json
 import configparser
 import argparse
 
+# 读取配置文件
 def read_config(config_file):
     config = configparser.ConfigParser()
     config.read(config_file)
     return config
 
+# 获取华为云身份验证的Token
 def get_XSubjectToken(config):
     IAM_AccountName = config.get('HUAWEI_API', 'HUAWEI_IAM_AccountName')
     IAM_UserName = config.get('HUAWEI_API', 'HUAWEI_IAM_UserName')
@@ -27,9 +29,9 @@ def get_XSubjectToken(config):
                 }
             },
             "scope": {
-                   "project": {
+                "project": {
                     "name": IAM_Project_ID
-               }
+                }
             }
         }
     }
@@ -39,6 +41,7 @@ def get_XSubjectToken(config):
     response = requests.post(url, data=json.dumps(data), headers=headers)
     return response.headers.get('X-Subject-Token')
 
+# 从NNR API获取数据
 def fetch_nnr_data(nnr_url, nnr_token):
     headers = {"content-type": "application/json", "token": nnr_token}
     response = requests.post(nnr_url, headers=headers)
@@ -48,6 +51,7 @@ def fetch_nnr_data(nnr_url, nnr_token):
         print("Failed to fetch data from NNR API:", response.status_code)
         return None
 
+# 创建DNS记录
 def create_dns_records(config, nnr_data):
     XSTOKEN = get_XSubjectToken(config)
     if not XSTOKEN:
@@ -66,7 +70,7 @@ def create_dns_records(config, nnr_data):
             domain_name = f"{domain_mappings[sid]}.{domain_root}"
             create_dns_record(zone_id, XSTOKEN, domain_name, hosts)
 
-            # Generate and manage suffixed domain names if multiple IPs are present
+            # 处理带序号的域名（多IP地址的情况）
             suffixed_domain_names = []
             if len(hosts) > 1:
                 for index, host in enumerate(hosts, start=1):
@@ -74,7 +78,7 @@ def create_dns_records(config, nnr_data):
                     suffixed_domain_names.append(suffixed_domain_name)
                     create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host])
 
-            # Query and clean up records for both primary and suffixed domain names
+            # 清理旧的DNS记录
             domains_to_manage = [domain_name] + suffixed_domain_names
             for domain_to_manage in domains_to_manage:
                 existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
@@ -86,11 +90,11 @@ def create_dns_records(config, nnr_data):
     if all_records_to_delete:
         batch_delete_record_sets(XSTOKEN, zone_id, all_records_to_delete)
 
+# 查询DNS记录集
 def query_record_sets(XSTOKEN, zone_id, domain_name):
-    # The query logic remains the same, ensure it matches with both primary and suffixed domain names usage
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
-    params = {"type": "A", "search_mode": "equal", "name": domain_name + '.'}  # Ensure the domain name is queried correctly
+    params = {"type": "A", "search_mode": "equal", "name": domain_name + '.'}
     response = requests.get(url, headers=headers, params=params)
     if response.status_code == 200:
         return response.json()['recordsets']
@@ -98,7 +102,7 @@ def query_record_sets(XSTOKEN, zone_id, domain_name):
         print(f"Failed to query records for {domain_name}: {response.status_code}")
         return []
 
-
+# 创建单个DNS记录
 def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=10):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     data = {
@@ -117,8 +121,7 @@ def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=10):
     else:
         print(f"Failed to create record for {domain_name}: {response.status_code}, {response.text}")
 
-
-
+# 批量删除DNS记录
 def batch_delete_record_sets(XSTOKEN, zone_id, record_ids):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
@@ -131,11 +134,13 @@ def batch_delete_record_sets(XSTOKEN, zone_id, record_ids):
         else:
             print(f"Failed to delete records: {response.status_code}, {response.text}")
 
+# 设置命令行参数解析器
 def setup_argparse():
     parser = argparse.ArgumentParser(description="Manage DNS records based on NNR API data")
     parser.add_argument('-c', '--config', type=str, help='Path to configuration file', default='NNR.conf')
     return parser.parse_args()
 
+# 主函数
 def main():
     args = setup_argparse()
     config = read_config(args.config)
