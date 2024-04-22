@@ -4,7 +4,7 @@ import configparser
 config = configparser.ConfigParser()
 
 # 读取配置文件
-config.read('NNR-Template.conf')
+config.read('NNR.conf')
 
 # 转换为Python格式的字符串
 python_config_str = "CONFIG = {\n"
