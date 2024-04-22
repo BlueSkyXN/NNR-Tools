@@ -66,15 +66,38 @@ def create_dns_records(config, nnr_data):
             domain_name = f"{domain_mappings[sid]}.{domain_root}"
             create_dns_record(zone_id, XSTOKEN, domain_name, hosts)
 
-            # Query existing records to determine which to delete
-            existing_records = query_record_sets(XSTOKEN, zone_id, domain_name)
-            record_ids = [rec['id'] for rec in existing_records]
-            latest_record_id = max(existing_records, key=lambda x: x['updated_at'])['id']
-            records_to_delete = [rid for rid in record_ids if rid != latest_record_id]
-            all_records_to_delete.extend(records_to_delete)
+            # Generate and manage suffixed domain names if multiple IPs are present
+            suffixed_domain_names = []
+            if len(hosts) > 1:
+                for index, host in enumerate(hosts, start=1):
+                    suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
+                    suffixed_domain_names.append(suffixed_domain_name)
+                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host])
+
+            # Query and clean up records for both primary and suffixed domain names
+            domains_to_manage = [domain_name] + suffixed_domain_names
+            for domain_to_manage in domains_to_manage:
+                existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
+                record_ids = [rec['id'] for rec in existing_records]
+                latest_record_id = max(existing_records, key=lambda x: x['updated_at'])['id']
+                records_to_delete = [rid for rid in record_ids if rid != latest_record_id]
+                all_records_to_delete.extend(records_to_delete)
 
     if all_records_to_delete:
         batch_delete_record_sets(XSTOKEN, zone_id, all_records_to_delete)
+
+def query_record_sets(XSTOKEN, zone_id, domain_name):
+    # The query logic remains the same, ensure it matches with both primary and suffixed domain names usage
+    url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
+    headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
+    params = {"type": "A", "search_mode": "equal", "name": domain_name + '.'}  # Ensure the domain name is queried correctly
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()['recordsets']
+    else:
+        print(f"Failed to query records for {domain_name}: {response.status_code}")
+        return []
+
 
 def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=10):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
@@ -94,27 +117,11 @@ def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=10):
     else:
         print(f"Failed to create record for {domain_name}: {response.status_code}, {response.text}")
 
-def setup_argparse():
-    parser = argparse.ArgumentParser(description="Manage DNS records based on NNR API data")
-    parser.add_argument('-c', '--config', type=str, default='NNR.conf', help='Path to configuration file')
-    return parser.parse_args()
 
-def query_record_sets(XSTOKEN, zone_id, domain_name):
-    url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
-    headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
-    params = {"type": "A", "search_mode": "equal", "name": domain_name}
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code == 200:
-        return response.json()['recordsets']
-    else:
-        print("Failed to query records:", response.status_code)
-        return []
 
 def batch_delete_record_sets(XSTOKEN, zone_id, record_ids):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
-
-    # 分批删除，每批最多100条记录
     for i in range(0, len(record_ids), 100):
         batch_ids = record_ids[i:i+100]
         data = {"recordset_ids": batch_ids}
@@ -123,6 +130,11 @@ def batch_delete_record_sets(XSTOKEN, zone_id, record_ids):
             print(f"Successfully deleted record IDs: {', '.join(batch_ids)}")
         else:
             print(f"Failed to delete records: {response.status_code}, {response.text}")
+
+def setup_argparse():
+    parser = argparse.ArgumentParser(description="Manage DNS records based on NNR API data")
+    parser.add_argument('-c', '--config', type=str, help='Path to configuration file', default='NNR.conf')
+    return parser.parse_args()
 
 def main():
     args = setup_argparse()
