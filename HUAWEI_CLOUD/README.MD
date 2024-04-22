@@ -1,6 +1,8 @@
 # HUAWEI华为云 引导手册
 
-如果你看不懂如何使用，建议V我50教你怎么用华为云
+如果你看不懂如何使用，建议V我50教你怎么用华为云，你可以用 [Lark](https://bit.ly/LarkSKY) 联系我 
+
+[NNR邀请链接](https://bit.ly/nnrinvite)
 
 ## 获取IAM用户Token（使用密码）
 官方文档 [https://support.huaweicloud.com/api-iam/iam_30_0001.html](https://support.huaweicloud.com/api-iam/iam_30_0001.html)
@@ -28,7 +30,7 @@ HUAWEI_IAM_Project = ap-southeast-3
 HUAWEI_DNS_ZONE_ID = xxx
 ```
 
-- 你可以在WEB控制台的，打开具体哪个主域名的记录的页面看到 ``zoneid``
+- 你可以在WEB控制台的，打开具体哪个主域名的记录的页面的URL看到 ``zoneid``
 - 也可以用我给的测试接口示例 ``TEST_HUAWEI_DNS_ZONE.py``中获取
 
 # 华为云函数部署方法
