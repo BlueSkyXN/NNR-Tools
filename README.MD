@@ -7,14 +7,14 @@
 [NNR邀请链接](https://bit.ly/nnrinvite)
 
 # NNR-Sync-HUAWEI.py
-华为云相关使用手册 
+华为云相关使用手册 [HUAWEI_CLOUD.MD](HUAWEI_CLOUD/README.MD)
 - 根据NNR的节点信息API，同步解析数据到华为云DNS解析
 - 需要指定配置文件``-c NNR.conf``或者使用默认同目录的``NNR.conf``来使用
 
 对于多IP的节点会采用母子策略，也就是母域名是完整的记录集，同时对每一个IP设置-01/-02之类的后缀加在域名中，你可以自己挑选单一的域名以便异常快速切换
 
 ## NNR.conf
-本工具的主要配置文件 [HUAWEI_CLOUD.MD](HUAWEI_CLOUD\README.MD)
+本工具的主要配置文件 [NNR.conf](NNR.conf)
 
 - [NNR_API] NNR的配置文件相关，主要包括固定的APIURL，你可以换成其他反代的URL；以及API_TOKEN需要在NNR的用户中心控制台中获取
 - [HUAWEI_API] 华为云的配置文件相关，主要包括一些认证信息
