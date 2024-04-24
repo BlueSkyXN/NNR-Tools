@@ -1,4 +1,23 @@
-<h1>NNR-Tools</h1>
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>NNR Tools Documentation</title>
+<style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }
+    h1, h2, h3 { color: #333; }
+    a { color: #1a0dab; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background-color: #f4f4f4; padding: 2px 5px; border-radius: 3px; }
+    ul { list-style-type: none; padding: 0; }
+    li { margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<h1><a href="https://github.com/BlueSkyXN/NNR-Tools">NNR-Tools</a></h1>
+
 这是一个对接NNR的工具库，非官方开发
 <ul><li>不对工具库可用性/安全性/合规性提供任何支持和保证，仅供自行学习使用</li></ul>
 <ul><li>看不懂请V50学费，你可以用 <a href="https://bit.ly/LarkSKY">Lark</a> 联系我 </li></ul>
@@ -6,46 +25,70 @@
 
 <a href="https://bit.ly/nnrinvite">NNR邀请链接</a>
 
-<h1>NNR-Sync-HUAWEI.py</h1>
+<h1><a href="https://github.com/BlueSkyXN/NNR-Tools/blob/main/NNR-Sync-HUAWEI.py">NNR-Sync-HUAWEI.py</a></h1>
+
 华为云相关使用手册 <a href="HUAWEI_CLOUD/README.MD">HUAWEI_CLOUD.MD</a>
+
 <ul><li>根据NNR的节点信息API，同步解析数据到华为云DNS解析</li></ul>
-<ul><li>需要指定配置文件`<code>-c NNR.conf</code><code>或者使用默认同目录的</code><code>NNR.conf</code><code>来使用</li></ul>
+
+<ul><li>需要指定配置文件`<code>-c NNR.conf</code>或者使用默认同目录的<code>NNR.conf</code>来使用</li></ul>
 
 对于多IP的节点会采用母子策略，也就是母域名是完整的记录集，同时对每一个IP设置-01/-02之类的后缀加在域名中，你可以自己挑选单一的域名以便异常快速切换
 
-<h2>NNR.conf</h2>
+<h2><a href="https://github.com/BlueSkyXN/NNR-Tools/blob/main/NNR-Template.conf">NNR.conf</a></h2>
+
 本工具的主要配置文件 <a href="NNR.conf">NNR.conf</a>
 
 <ul><li>[NNR_API] NNR的配置文件相关，主要包括固定的APIURL，你可以换成其他反代的URL；以及API_TOKEN需要在NNR的用户中心控制台中获取</li></ul>
 <ul><li>[HUAWEI_API] 华为云的配置文件相关，主要包括一些认证信息</li></ul>
-<ul><li><a href="SID.md">DOMAIN_MAP] 域名映射的配置，包括根域名和UUID对应的域名前缀，UUID来自NNR的API中的SID，你可以参考 [SID.md</a></li></ul>
+<ul><li>DOMAIN_MAP] 域名映射的配置，包括根域名和UUID对应的域名前缀，UUID来自NNR的API中的SID，你可以参考 <a href="SID.md">SID.md</a></li></ul>
 <ul><li>[HUAWEI_DNS] 华为云DNS的配置文件相关，主要包括使用的域名对应的空间区域号码，也就是ZONE_ID</li></ul>
 
-当然，我提供的是 </code><code>NNR-Template.conf</code><code>，你需要改名为 </code><code>NNR.conf</code><code> 后编辑，建议根据自己的实际情况设置映射关系
+当然，我提供的是 <code>NNR-Template.conf</code>，你需要改名为 <code>NNR.conf</code> 后编辑，建议根据自己的实际情况设置映射关系
 
-<h2>NNR-Sync-HUAWEI-HWS.py</h2>
+<h2><a href="https://github.com/BlueSkyXN/NNR-Tools/blob/main/NNR-Sync-HUAWEI-HWS.py">NNR-Sync-HUAWEI-HWS.py</a></h2>
 
-<ul><li><a href="NNR-Sync-HUAWEI.py">NNR-Sync-HUAWEI.py</a> 是在华为云云函数的无服务器环境中的实现，更方便简单</li></ul>
+<a href="NNR-Sync-HUAWEI.py">NNR-Sync-HUAWEI.py</a> 是在华为云云函数的无服务器环境中的实现，更方便简单
 
-<h2>CONFtoOneFile.py</h2>
+<h2><a href="https://github.com/BlueSkyXN/NNR-Tools/blob/main/CONFtoOneFile.py">CONFtoOneFile.py</a></h2>
 
-<ul><li>你可以使用<a href="CONFtoOneFile.py">CONFtoOneFile.py</a> 将</code><code>NNR.conf</code>`转为可替换集成云函数py的配置部分，方便你编译云函数版本（HWS）的配置区块</li></ul>
+你可以使用 <a href="CONFtoOneFile.py"> CONFtoOneFile.py</a> 将<code>NNR.conf</code>`转为可替换集成云函数py的配置部分，方便你编译云函数版本（HWS）的配置区块.</ul>
 
 
 <h1>FAQ</h1>
+<ol>
+  <li>本工具是NNR官方的吗？
+    <ul>
+      <li>不是，自己写的，与官方无任何关联和利益关系，不提供任何支持和保证，如果哪天跑路了别找我</li>
+    </ul>
+  </li>
+  <li>本工具提供免费技术支持和答疑吗？
+    <ul>
+      <li>不提供，V50再说</li>
+    </ul>
+  </li>
+  <li>为什么没有CloudFlare/DNSPod/腾讯DNS/阿里DNS/亚马逊DNS等平台的对接？
+    <ul>
+      <li>没人打钱</li>
+    </ul>
+  </li>
+  <li>使用你的邀请链接有什么好处吗？
+    <ul>
+      <li>没有，只会让我多白嫖几天NNR的套餐</li>
+    </ul>
+  </li>
+  <li>快速打钱怎么弄</li>
+  <ul>
+    <li>
+        <a href="https://github.com/sponsors/blueskyxn">
+            <img src="https://img.shields.io/badge/-赞助-ff69b4?style=for-the-badge&logo=github" alt="赞助">
+        </a>
+    </li>
+  </ul>
+</ol>
 
-1. 本工具是NNR官方的吗？
-    - 不是，自己写的，与官方无任何关联和利益关系，不提供任何支持和保证，如果哪天跑路了别找我
-
-2. 本工具提供免费技术支持和答疑吗？
-    - 不提供，V50再说
-
-3. 为什么没有CloudFlare/DNSPod/腾讯DNS/阿里DNS/亚马逊DNS等平台的对接？
-    - 没人打钱
-
-4. 使用你的邀请链接有什么好处吗？
-    - 没有，只会让我多白嫖几天NNR的套餐
-
-5. 快速打钱怎么弄
-
-     <a href="https://img.shields.io/badge/-赞助-ff69b4?style=for-the-badge&logo=github">![赞助</a>](https://github.com/sponsors/blueskyxn) -> <a href="https://github.com/sponsors/blueskyxn">https://github.com/sponsors/blueskyxn</a>
+</body>
+    <a href="https://github.com/BlueSkyXN/NNR-Tools" target="_blank" title="Visit GitHub Repository">
+        <img src="https://icons.iconarchive.com/icons/iconoir-team/iconoir/48/github-circle-icon.png" width="48" height="48">
+    </a>
+</html>
