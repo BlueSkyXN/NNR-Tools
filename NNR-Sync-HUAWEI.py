@@ -2,6 +2,7 @@ import requests
 import json
 import configparser
 import argparse
+import ipaddress
 
 # 读取配置文件
 def read_config(config_file):
@@ -68,7 +69,12 @@ def create_dns_records(config, nnr_data):
         hosts = entry['host'].split(',')
         if sid in domain_mappings:
             domain_name = f"{domain_mappings[sid]}.{domain_root}"
-            create_dns_record(zone_id, XSTOKEN, domain_name, hosts)
+            ipv4_hosts = [host for host in hosts if is_ipv4(host)]
+            ipv6_hosts = [host for host in hosts if is_ipv6(host)]
+            if ipv4_hosts:
+                create_dns_record(zone_id, XSTOKEN, domain_name, ipv4_hosts, record_type="A")
+            if ipv6_hosts:
+                create_dns_record(zone_id, XSTOKEN, domain_name, ipv6_hosts, record_type="AAAA")
 
             # 处理带序号的域名（多IP地址的情况）
             suffixed_domain_names = []
@@ -76,38 +82,68 @@ def create_dns_records(config, nnr_data):
                 for index, host in enumerate(hosts, start=1):
                     suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
                     suffixed_domain_names.append(suffixed_domain_name)
-                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host])
+                    if is_ipv4(host):
+                        create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="A")
+                    elif is_ipv6(host):
+                        create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="AAAA")
 
             # 清理旧的DNS记录
             domains_to_manage = [domain_name] + suffixed_domain_names
             for domain_to_manage in domains_to_manage:
                 existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
-                record_ids = [rec['id'] for rec in existing_records]
-                latest_record_id = max(existing_records, key=lambda x: x['updated_at'])['id']
-                records_to_delete = [rid for rid in record_ids if rid != latest_record_id]
+                records_to_delete = identify_records_to_delete(existing_records)
                 all_records_to_delete.extend(records_to_delete)
 
     if all_records_to_delete:
         batch_delete_record_sets(XSTOKEN, zone_id, all_records_to_delete)
 
+# 判断是否为IPv4地址
+def is_ipv4(address):
+    try:
+        return type(ipaddress.ip_address(address)) is ipaddress.IPv4Address
+    except ValueError:
+        return False
+
+# 判断是否为IPv6地址
+def is_ipv6(address):
+    try:
+        return type(ipaddress.ip_address(address)) is ipaddress.IPv6Address
+    except ValueError:
+        return False
+
 # 查询DNS记录集
 def query_record_sets(XSTOKEN, zone_id, domain_name):
-    url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
-    headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
-    params = {"type": "A", "search_mode": "equal", "name": domain_name + '.'}
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code == 200:
-        return response.json()['recordsets']
-    else:
-        print(f"Failed to query records for {domain_name}: {response.status_code}")
-        return []
+    record_types = ["A", "AAAA"]
+    all_records = []
+    for record_type in record_types:
+        url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
+        headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
+        params = {"type": record_type, "search_mode": "equal", "name": domain_name + '.'}
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            all_records.extend(response.json()['recordsets'])
+        else:
+            print(f"Failed to query {record_type} records for {domain_name}: {response.status_code}")
+    return all_records
+
+# 识别要删除的记录
+def identify_records_to_delete(existing_records):
+    records_to_delete = []
+    records_by_type = {"A": [], "AAAA": []}
+    for record in existing_records:
+        records_by_type[record['type']].append(record)
+    for record_type, records in records_by_type.items():
+        if records:
+            latest_record = max(records, key=lambda x: x['updated_at'])
+            records_to_delete.extend([record['id'] for record in records if record['id'] != latest_record['id']])
+    return records_to_delete
 
 # 创建单个DNS记录
-def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=10):
+def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, record_type="A", ttl=10):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     data = {
         "name": domain_name + ".",
-        "type": "A",
+        "type": record_type,
         "ttl": ttl,
         "records": record_values
     }
