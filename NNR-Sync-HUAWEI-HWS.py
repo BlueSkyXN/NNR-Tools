@@ -32,24 +32,29 @@ CONFIG = {
         "huawei_dns_test_domain": "test.huawei-ddns.com",
     },
 }
+
 # 获取华为云身份验证的Token
-def get_XSubjectToken():
-    config = CONFIG['HUAWEI_API']
+def get_XSubjectToken(config):
+    IAM_AccountName = config['HUAWEI_API']['HUAWEI_IAM_AccountName']
+    IAM_UserName = config['HUAWEI_API']['HUAWEI_IAM_UserName']
+    IAM_Password = config['HUAWEI_API']['HUAWEI_IAM_Password']
+    IAM_Project_ID = config['HUAWEI_API']['HUAWEI_IAM_Project']
+
     data = {
         "auth": {
             "identity": {
                 "methods": ["password"],
                 "password": {
                     "user": {
-                        "domain": {"name": config['HUAWEI_IAM_AccountName']},
-                        "name": config['HUAWEI_IAM_UserName'],
-                        "password": config['HUAWEI_IAM_Password']
+                        "domain": {"name": IAM_AccountName},
+                        "name": IAM_UserName,
+                        "password": IAM_Password
                     }
                 }
             },
             "scope": {
                 "project": {
-                    "name": config['HUAWEI_IAM_Project']
+                    "name": IAM_Project_ID
                 }
             }
         }
@@ -58,77 +63,120 @@ def get_XSubjectToken():
     url = "https://iam.myhuaweicloud.com/v3/auth/tokens"
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, data=json.dumps(data), headers=headers)
-    return response.headers.get('X-Subject-Token')
+    if response.status_code == 201:
+        print("Token obtained successfully")
+        return response.headers.get('X-Subject-Token')
+    else:
+        print(f"Failed to obtain token: {response.status_code}, {response.text}")
+        return None
 
 # 从NNR API获取数据
-def fetch_nnr_data():
-    nnr_url = CONFIG['NNR_API']['NNR_API_URL']
-    nnr_token = CONFIG['NNR_API']['NNR_API_TOKEN']
+def fetch_nnr_data(nnr_url, nnr_token):
     headers = {"content-type": "application/json", "token": nnr_token}
     response = requests.post(nnr_url, headers=headers)
     if response.status_code == 200:
+        print("NNR data fetched successfully")
         return response.json()['data']
     else:
-        print("Failed to fetch data from NNR API:", response.status_code)
+        print(f"Failed to fetch data from NNR API: {response.status_code}, {response.text}")
         return None
 
 # 创建DNS记录
-def create_dns_records():
-    XSTOKEN = get_XSubjectToken()
+def create_dns_records(config, nnr_data):
+    XSTOKEN = get_XSubjectToken(config)
     if not XSTOKEN:
         print("Failed to obtain token, check credentials.")
         return
 
-    zone_id = CONFIG['HUAWEI_DNS']['HUAWEI_DNS_ZONE_ID']
-    domain_root = CONFIG['DOMAIN_MAP']['DOMAIN_ROOT']
-    domain_mappings = {key: value for key, value in CONFIG['DOMAIN_MAP'].items() if key != 'DOMAIN_ROOT'}
+    zone_id = config['HUAWEI_DNS']['HUAWEI_DNS_ZONE_ID']
+    domain_root = config['DOMAIN_MAP']['DOMAIN_ROOT']
+    domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMAIN_ROOT'}
     all_records_to_delete = []
 
-    for entry in fetch_nnr_data():
+    for entry in nnr_data:
         sid = entry['sid']
         hosts = entry['host'].split(',')
         if sid in domain_mappings:
             domain_name = f"{domain_mappings[sid]}.{domain_root}"
-            create_dns_record(zone_id, XSTOKEN, domain_name, hosts)
+            domain_name_v4 = f"{domain_mappings[sid]}-v4.{domain_root}"
+            domain_name_v6 = f"{domain_mappings[sid]}-v6.{domain_root}"
+            ipv4_hosts = [host for host in hosts if is_ipv4(host)]
+            ipv6_hosts = [host for host in hosts if is_ipv6(host)]
+            
+            if ipv4_hosts:
+                create_dns_record(zone_id, XSTOKEN, domain_name, ipv4_hosts, record_type="A")
+                create_dns_record(zone_id, XSTOKEN, domain_name_v4, ipv4_hosts, record_type="A")
+            if ipv6_hosts:
+                create_dns_record(zone_id, XSTOKEN, domain_name, ipv6_hosts, record_type="AAAA")
+                create_dns_record(zone_id, XSTOKEN, domain_name_v6, ipv6_hosts, record_type="AAAA")
 
             # 处理带序号的域名（多IP地址的情况）
             suffixed_domain_names = []
-            if len(hosts) > 1:
-                for index, host in enumerate(hosts, start=1):
-                    suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
-                    suffixed_domain_names.append(suffixed_domain_name)
-                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host])
+            for index, host in enumerate(hosts, start=1):
+                suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
+                suffixed_domain_names.append(suffixed_domain_name)
+                if is_ipv4(host):
+                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="A")
+                elif is_ipv6(host):
+                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="AAAA")
 
             # 清理旧的DNS记录
-            domains_to_manage = [domain_name] + suffixed_domain_names
+            domains_to_manage = [domain_name, domain_name_v4, domain_name_v6] + suffixed_domain_names
             for domain_to_manage in domains_to_manage:
                 existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
-                record_ids = [rec['id'] for rec in existing_records]
-                latest_record_id = max(existing_records, key=lambda x: x['updated_at'])['id']
-                records_to_delete = [rid for rid in record_ids if rid != latest_record_id]
+                records_to_delete = identify_records_to_delete(existing_records)
                 all_records_to_delete.extend(records_to_delete)
 
     if all_records_to_delete:
         batch_delete_record_sets(XSTOKEN, zone_id, all_records_to_delete)
 
+# 判断是否为IPv4地址
+def is_ipv4(address):
+    try:
+        return type(ipaddress.ip_address(address)) is ipaddress.IPv4Address
+    except ValueError:
+        return False
+
+# 判断是否为IPv6地址
+def is_ipv6(address):
+    try:
+        return type(ipaddress.ip_address(address)) is ipaddress.IPv6Address
+    except ValueError:
+        return False
+
 # 查询DNS记录集
 def query_record_sets(XSTOKEN, zone_id, domain_name):
-    url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
-    headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
-    params = {"type": "A", "search_mode": "equal", "name": domain_name + '.'}
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code == 200:
-        return response.json()['recordsets']
-    else:
-        print(f"Failed to query records for {domain_name}: {response.status_code}")
-        return []
+    record_types = ["A", "AAAA"]
+    all_records = []
+    for record_type in record_types:
+        url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
+        headers = {"Content-Type": "application/json", "X-Auth-Token": XSTOKEN}
+        params = {"type": record_type, "search_mode": "equal", "name": domain_name + '.'}
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            all_records.extend(response.json()['recordsets'])
+        else:
+            print(f"Failed to query {record_type} records for {domain_name}: {response.status_code}")
+    return all_records
+
+# 识别要删除的记录
+def identify_records_to_delete(existing_records):
+    records_to_delete = []
+    records_by_type = {"A": [], "AAAA": []}
+    for record in existing_records:
+        records_by_type[record['type']].append(record)
+    for record_type, records in records_by_type.items():
+        if records:
+            latest_record = max(records, key=lambda x: x['updated_at'])
+            records_to_delete.extend([record['id'] for record in records if record['id'] != latest_record['id']])
+    return records_to_delete
 
 # 创建单个DNS记录
-def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, ttl=10):
+def create_dns_record(zone_id, XSTOKEN, domain_name, record_values, record_type="A", ttl=10):
     url = f"https://dns.myhuaweicloud.com/v2.1/zones/{zone_id}/recordsets"
     data = {
         "name": domain_name + ".",
-        "type": "A",
+        "type": record_type,
         "ttl": ttl,
         "records": record_values
     }
@@ -157,10 +205,12 @@ def batch_delete_record_sets(XSTOKEN, zone_id, record_ids):
 
 # 主函数
 def main():
-    create_dns_records()
+    config = CONFIG
+    nnr_url, nnr_token = config['NNR_API']['NNR_API_URL'], config['NNR_API']['NNR_API_TOKEN']
+    nnr_data = fetch_nnr_data(nnr_url, nnr_token)
+    if nnr_data:
+        create_dns_records(config, nnr_data)
 
+# 云函数入口
 def handler(event, context):
-    main()
-
-if __name__ == "__main__":
     main()
