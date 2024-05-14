@@ -24,17 +24,16 @@ CONFIG = {
         "DOMAIN_ROOT": "huawei-ddns.com",
     },
     "HUAWEI_API": {
-        "HUAWEI_IAM_ACCOUNTNAME": "hwXXX",
-        "HUAWEI_IAM_USERNAME": "iamname",
-        "HUAWEI_IAM_PASSWORD": "iampassword",
-        "HUAWEI_IAM_PROJECT": "ap-southeast-3",
+        "HUAWEI_IAM_AccountName": "hwXXX",
+        "HUAWEI_IAM_UserName": "iamname",
+        "HUAWEI_IAM_Password": "iampassword",
+        "HUAWEI_IAM_Project": "ap-southeast-3",
     },
     "HUAWEI_DNS": {
         "HUAWEI_DNS_ZONE_ID": "xxx",
         "HUAWEI_DNS_TEST_DOMAIN": "test.huawei-ddns.com",
     },
 }
-
 
 # 获取华为云身份验证的Token
 def get_XSubjectToken(config):

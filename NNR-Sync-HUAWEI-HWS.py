@@ -1,5 +1,6 @@
 import requests
 import json
+import ipaddress
 
 # 配置信息硬编码
 CONFIG = {
@@ -22,10 +23,10 @@ CONFIG = {
         "DOMAIN_ROOT": "huawei-ddns.com",
     },
     "HUAWEI_API": {
-        "HUAWEI_IAM_ACCOUNTNAME": "hwXXX",
-        "HUAWEI_IAM_USERNAME": "iamname",
-        "HUAWEI_IAM_PASSWORD": "iampassword",
-        "HUAWEI_IAM_PROJECT": "ap-southeast-3",
+        "HUAWEI_IAM_AccountName": "hwXXX",
+        "HUAWEI_IAM_UserName": "iamname",
+        "HUAWEI_IAM_Password": "iampassword",
+        "HUAWEI_IAM_Project": "ap-southeast-3",
     },
     "HUAWEI_DNS": {
         "HUAWEI_DNS_ZONE_ID": "xxx",
@@ -33,13 +34,12 @@ CONFIG = {
     },
 }
 
-
 # 获取华为云身份验证的Token
 def get_XSubjectToken(config):
-    IAM_AccountName = config['HUAWEI_API']['HUAWEI_IAM_AccountName']
-    IAM_UserName = config['HUAWEI_API']['HUAWEI_IAM_UserName']
-    IAM_Password = config['HUAWEI_API']['HUAWEI_IAM_Password']
-    IAM_Project_ID = config['HUAWEI_API']['HUAWEI_IAM_Project']
+    IAM_AccountName = config['HUAWEI_API']['huawei_iam_accountname']
+    IAM_UserName = config['HUAWEI_API']['huawei_iam_username']
+    IAM_Password = config['HUAWEI_API']['huawei_iam_password']
+    IAM_Project_ID = config['HUAWEI_API']['huawei_iam_project']
 
     data = {
         "auth": {
@@ -89,9 +89,9 @@ def create_dns_records(config, nnr_data):
         print("Failed to obtain token, check credentials.")
         return
 
-    zone_id = config['HUAWEI_DNS']['HUAWEI_DNS_ZONE_ID']
-    domain_root = config['DOMAIN_MAP']['DOMAIN_ROOT']
-    domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMAIN_ROOT'}
+    zone_id = config['HUAWEI_DNS']['huawei_dns_zone_id']
+    domain_root = config['DOMAIN_MAP']['domain_root']
+    domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'domain_root'}
     all_records_to_delete = []
 
     for entry in nnr_data:
@@ -207,7 +207,7 @@ def batch_delete_record_sets(XSTOKEN, zone_id, record_ids):
 # 主函数
 def main():
     config = CONFIG
-    nnr_url, nnr_token = config['NNR_API']['NNR_API_URL'], config['NNR_API']['NNR_API_TOKEN']
+    nnr_url, nnr_token = config['NNR_API']['nnr_api_url'], config['NNR_API']['nnr_api_token']
     nnr_data = fetch_nnr_data(nnr_url, nnr_token)
     if nnr_data:
         create_dns_records(config, nnr_data)
