@@ -40,16 +40,22 @@ def get_XSubjectToken(config):
     url = "https://iam.myhuaweicloud.com/v3/auth/tokens"
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, data=json.dumps(data), headers=headers)
-    return response.headers.get('X-Subject-Token')
+    if response.status_code == 201:
+        print("Token obtained successfully")
+        return response.headers.get('X-Subject-Token')
+    else:
+        print(f"Failed to obtain token: {response.status_code}, {response.text}")
+        return None
 
 # 从NNR API获取数据
 def fetch_nnr_data(nnr_url, nnr_token):
     headers = {"content-type": "application/json", "token": nnr_token}
     response = requests.post(nnr_url, headers=headers)
     if response.status_code == 200:
+        print("NNR data fetched successfully")
         return response.json()['data']
     else:
-        print("Failed to fetch data from NNR API:", response.status_code)
+        print(f"Failed to fetch data from NNR API: {response.status_code}, {response.text}")
         return None
 
 # 创建DNS记录
@@ -69,26 +75,30 @@ def create_dns_records(config, nnr_data):
         hosts = entry['host'].split(',')
         if sid in domain_mappings:
             domain_name = f"{domain_mappings[sid]}.{domain_root}"
+            domain_name_v4 = f"{domain_mappings[sid]}-v4.{domain_root}"
+            domain_name_v6 = f"{domain_mappings[sid]}-v6.{domain_root}"
             ipv4_hosts = [host for host in hosts if is_ipv4(host)]
             ipv6_hosts = [host for host in hosts if is_ipv6(host)]
+            
             if ipv4_hosts:
                 create_dns_record(zone_id, XSTOKEN, domain_name, ipv4_hosts, record_type="A")
+                create_dns_record(zone_id, XSTOKEN, domain_name_v4, ipv4_hosts, record_type="A")
             if ipv6_hosts:
                 create_dns_record(zone_id, XSTOKEN, domain_name, ipv6_hosts, record_type="AAAA")
+                create_dns_record(zone_id, XSTOKEN, domain_name_v6, ipv6_hosts, record_type="AAAA")
 
             # 处理带序号的域名（多IP地址的情况）
             suffixed_domain_names = []
-            if len(hosts) > 1:
-                for index, host in enumerate(hosts, start=1):
-                    suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
-                    suffixed_domain_names.append(suffixed_domain_name)
-                    if is_ipv4(host):
-                        create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="A")
-                    elif is_ipv6(host):
-                        create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="AAAA")
+            for index, host in enumerate(hosts, start=1):
+                suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
+                suffixed_domain_names.append(suffixed_domain_name)
+                if is_ipv4(host):
+                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="A")
+                elif is_ipv6(host):
+                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="AAAA")
 
             # 清理旧的DNS记录
-            domains_to_manage = [domain_name] + suffixed_domain_names
+            domains_to_manage = [domain_name, domain_name_v4, domain_name_v6] + suffixed_domain_names
             for domain_to_manage in domains_to_manage:
                 existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
                 records_to_delete = identify_records_to_delete(existing_records)
