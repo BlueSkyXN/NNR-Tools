@@ -1,5 +1,7 @@
 import requests
 import json
+import ipaddress
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 配置信息硬编码
 CONFIG = {
@@ -36,10 +38,10 @@ CONFIG = {
 
 # 获取华为云身份验证的Token
 def get_XSubjectToken(config):
-    IAM_AccountName = config['HUAWEI_API']['HUAWEI_IAM_AccountName']
-    IAM_UserName = config['HUAWEI_API']['HUAWEI_IAM_UserName']
-    IAM_Password = config['HUAWEI_API']['HUAWEI_IAM_Password']
-    IAM_Project_ID = config['HUAWEI_API']['HUAWEI_IAM_Project']
+    IAM_AccountName = config['HUAWEI_API']['HUAWEI_IAM_ACCOUNTNAME']
+    IAM_UserName = config['HUAWEI_API']['HUAWEI_IAM_USERNAME']
+    IAM_Password = config['HUAWEI_API']['HUAWEI_IAM_PASSWORD']
+    IAM_Project_ID = config['HUAWEI_API']['HUAWEI_IAM_PROJECT']
 
     data = {
         "auth": {
@@ -82,6 +84,10 @@ def fetch_nnr_data(nnr_url, nnr_token):
         print(f"Failed to fetch data from NNR API: {response.status_code}, {response.text}")
         return None
 
+# 并发创建DNS记录的任务
+def create_dns_record_task(zone_id, XSTOKEN, domain_name, record_values, record_type):
+    create_dns_record(zone_id, XSTOKEN, domain_name, record_values, record_type=record_type)
+
 # 创建DNS记录
 def create_dns_records(config, nnr_data):
     XSTOKEN = get_XSubjectToken(config)
@@ -94,39 +100,47 @@ def create_dns_records(config, nnr_data):
     domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMAIN_ROOT'}
     all_records_to_delete = []
 
-    for entry in nnr_data:
-        sid = entry['sid']
-        hosts = entry['host'].split(',')
-        if sid in domain_mappings:
-            domain_name = f"{domain_mappings[sid]}.{domain_root}"
-            domain_name_v4 = f"{domain_mappings[sid]}-v4.{domain_root}"
-            domain_name_v6 = f"{domain_mappings[sid]}-v6.{domain_root}"
-            ipv4_hosts = [host for host in hosts if is_ipv4(host)]
-            ipv6_hosts = [host for host in hosts if is_ipv6(host)]
-            
-            if ipv4_hosts:
-                create_dns_record(zone_id, XSTOKEN, domain_name, ipv4_hosts, record_type="A")
-                create_dns_record(zone_id, XSTOKEN, domain_name_v4, ipv4_hosts, record_type="A")
-            if ipv6_hosts:
-                create_dns_record(zone_id, XSTOKEN, domain_name, ipv6_hosts, record_type="AAAA")
-                create_dns_record(zone_id, XSTOKEN, domain_name_v6, ipv6_hosts, record_type="AAAA")
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        future_to_domain = {}
+        for entry in nnr_data:
+            sid = entry['sid']
+            hosts = entry['host'].split(',')
+            if sid in domain_mappings:
+                domain_name = f"{domain_mappings[sid]}.{domain_root}"
+                domain_name_v4 = f"{domain_mappings[sid]}-v4.{domain_root}"
+                domain_name_v6 = f"{domain_mappings[sid]}-v6.{domain_root}"
+                ipv4_hosts = [host for host in hosts if is_ipv4(host)]
+                ipv6_hosts = [host for host in hosts if is_ipv6(host)]
 
-            # 处理带序号的域名（多IP地址的情况）
-            suffixed_domain_names = []
-            for index, host in enumerate(hosts, start=1):
-                suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
-                suffixed_domain_names.append(suffixed_domain_name)
-                if is_ipv4(host):
-                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="A")
-                elif is_ipv6(host):
-                    create_dns_record(zone_id, XSTOKEN, suffixed_domain_name, [host], record_type="AAAA")
+                if ipv4_hosts:
+                    future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name, ipv4_hosts, "A")] = domain_name
+                    future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name_v4, ipv4_hosts, "A")] = domain_name_v4
+                if ipv6_hosts:
+                    future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name, ipv6_hosts, "AAAA")] = domain_name
+                    future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name_v6, ipv6_hosts, "AAAA")] = domain_name_v6
 
-            # 清理旧的DNS记录
-            domains_to_manage = [domain_name, domain_name_v4, domain_name_v6] + suffixed_domain_names
-            for domain_to_manage in domains_to_manage:
-                existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
-                records_to_delete = identify_records_to_delete(existing_records)
-                all_records_to_delete.extend(records_to_delete)
+                # 处理带序号的域名（多IP地址的情况）
+                for index, host in enumerate(hosts, start=1):
+                    suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
+                    if is_ipv4(host):
+                        future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, suffixed_domain_name, [host], "A")] = suffixed_domain_name
+                    elif is_ipv6(host):
+                        future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, suffixed_domain_name, [host], "AAAA")] = suffixed_domain_name
+
+                # 清理旧的DNS记录
+                domains_to_manage = [domain_name, domain_name_v4, domain_name_v6] + [f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}" for index in range(1, len(hosts)+1)]
+                for domain_to_manage in domains_to_manage:
+                    existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
+                    records_to_delete = identify_records_to_delete(existing_records)
+                    all_records_to_delete.extend(records_to_delete)
+
+        for future in as_completed(future_to_domain):
+            domain_name = future_to_domain[future]
+            try:
+                future.result()
+                print(f"Successfully created DNS record for {domain_name}")
+            except Exception as exc:
+                print(f"Failed to create DNS record for {domain_name} generated an exception: {exc}")
 
     if all_records_to_delete:
         batch_delete_record_sets(XSTOKEN, zone_id, all_records_to_delete)
