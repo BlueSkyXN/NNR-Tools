@@ -111,7 +111,7 @@ def create_dns_records(config, nnr_data):
                 domains_to_manage = [domain_name, domain_name_v4, domain_name_v6] + [f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}" for index in range(1, len(hosts)+1)]
                 for domain_to_manage in domains_to_manage:
                     existing_records = query_record_sets(XSTOKEN, zone_id, domain_to_manage)
-                    records_to_delete = identify_records_to_delete(existing_records)
+                    records_to_delete = identify_records_to_delete(existing_records, independent_v4v6, independent_ip)
                     all_records_to_delete.extend(records_to_delete)
 
         for future in as_completed(future_to_domain):
@@ -155,15 +155,26 @@ def query_record_sets(XSTOKEN, zone_id, domain_name):
     return all_records
 
 # 识别要删除的记录
-def identify_records_to_delete(existing_records):
+def identify_records_to_delete(existing_records, independent_v4v6, independent_ip):
     records_to_delete = []
     records_by_type = {"A": [], "AAAA": []}
     for record in existing_records:
         records_by_type[record['type']].append(record)
+
     for record_type, records in records_by_type.items():
         if records:
-            latest_record = max(records, key=lambda x: x['updated_at'])
-            records_to_delete.extend([record['id'] for record in records if record['id'] != latest_record['id']])
+            if record_type == "A":
+                if not independent_v4v6 and not independent_ip:
+                    records_to_delete.extend([record['id'] for record in records])
+                elif not independent_v4v6 or not independent_ip:
+                    latest_record = max(records, key=lambda x: x['updated_at'])
+                    records_to_delete.extend([record['id'] for record in records if record['id'] != latest_record['id']])
+            elif record_type == "AAAA":
+                if not independent_v4v6 and not independent_ip:
+                    records_to_delete.extend([record['id'] for record in records])
+                elif not independent_v4v6 or not independent_ip:
+                    latest_record = max(records, key=lambda x: x['updated_at'])
+                    records_to_delete.extend([record['id'] for record in records if record['id'] != latest_record['id']])
     return records_to_delete
 
 # 创建单个DNS记录
