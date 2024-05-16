@@ -73,6 +73,8 @@ def create_dns_records(config, nnr_data):
     zone_id = config.get('HUAWEI_DNS', 'HUAWEI_DNS_ZONE_ID')
     domain_root = config['DOMAIN_MAP']['DOMAIN_ROOT']
     domain_mappings = {key: value for key, value in config['DOMAIN_MAP'].items() if key != 'DOMAIN_ROOT'}
+    independent_v4v6 = config.getboolean('HUAWEI_DNS_OPTIONS', 'IndependentV4V6Records', fallback=True)
+    independent_ip = config.getboolean('HUAWEI_DNS_OPTIONS', 'IndependentIPRecords', fallback=True)
     all_records_to_delete = []
 
     with ThreadPoolExecutor(max_workers=50) as executor:
@@ -89,18 +91,21 @@ def create_dns_records(config, nnr_data):
 
                 if ipv4_hosts:
                     future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name, ipv4_hosts, "A")] = domain_name
-                    future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name_v4, ipv4_hosts, "A")] = domain_name_v4
+                    if independent_v4v6:
+                        future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name_v4, ipv4_hosts, "A")] = domain_name_v4
                 if ipv6_hosts:
                     future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name, ipv6_hosts, "AAAA")] = domain_name
-                    future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name_v6, ipv6_hosts, "AAAA")] = domain_name_v6
+                    if independent_v4v6:
+                        future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, domain_name_v6, ipv6_hosts, "AAAA")] = domain_name_v6
 
                 # 处理带序号的域名（多IP地址的情况）
-                for index, host in enumerate(hosts, start=1):
-                    suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
-                    if is_ipv4(host):
-                        future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, suffixed_domain_name, [host], "A")] = suffixed_domain_name
-                    elif is_ipv6(host):
-                        future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, suffixed_domain_name, [host], "AAAA")] = suffixed_domain_name
+                if independent_ip:
+                    for index, host in enumerate(hosts, start=1):
+                        suffixed_domain_name = f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}"
+                        if is_ipv4(host):
+                            future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, suffixed_domain_name, [host], "A")] = suffixed_domain_name
+                        elif is_ipv6(host):
+                            future_to_domain[executor.submit(create_dns_record_task, zone_id, XSTOKEN, suffixed_domain_name, [host], "AAAA")] = suffixed_domain_name
 
                 # 清理旧的DNS记录
                 domains_to_manage = [domain_name, domain_name_v4, domain_name_v6] + [f"{domain_mappings[sid]}-{str(index).zfill(2)}.{domain_root}" for index in range(1, len(hosts)+1)]

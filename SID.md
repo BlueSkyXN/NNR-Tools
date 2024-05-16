@@ -11,3 +11,4 @@
 | f339f3e7-5520-4268-8ca7-b0dcde7a402d  | neko_tunnel| 安徽CU-香港 x1.5    | 1.5 | 5   | 1      | 倍率: 1.5                              |
 | c3b76a74-74d1-4077-af40-4f95d2e93f43  | neko_tunnel| 安徽CM-日本 x1.5    | 1.5 | 4   | 1      | 安徽移动-日本<br>支持IPv6<br>倍率: 1.5   |
 | 3f6c3f59-67e5-48fb-9e61-e34e1db95227  | neko_tunnel| 安徽CM-香港         | 1   | 3   | 1      | 安徽移动 HKT<br>1x<br>不保证速率        |
+| b4f0a252-1df1-4056-b5a2-b47905906bfe  | neko_relay | 深港IEPL IPv6 x6    | 6   | 12  | 1      | 深港IEPL IPv6<br>倍率: 6<br>端内1-2ms<br>IPv6 入口<br>支持转发IPv6<br>支持UDP |
