@@ -2,6 +2,7 @@ import requests
 import json
 import socket
 import ipaddress
+from datetime import datetime
 
 # 配置信息硬编码
 CONFIG = {
@@ -151,11 +152,16 @@ def main():
             create_dns_record(zone_id, XSTOKEN, target_domain, valid_ips, record_type="A")
 
             existing_records = query_record_sets(XSTOKEN, zone_id, target_domain)
-            records_to_delete = [record['id'] for record in existing_records if set(record['records']) != set(valid_ips)]
+            records_to_delete = identify_old_records(existing_records)
             if records_to_delete:
                 batch_delete_record_sets(XSTOKEN, zone_id, records_to_delete)
         else:
             print(f"No valid IPs found for {domain_name_v4}, keeping existing records.")
+
+# 识别要删除的记录，保留最新的记录
+def identify_old_records(records):
+    latest_record = max(records, key=lambda x: datetime.strptime(x['created_at'], "%Y-%m-%dT%H:%M:%S.%f"))
+    return [record['id'] for record in records if record['id'] != latest_record['id']]
 
 # 云函数入口
 def handler(event, context):
